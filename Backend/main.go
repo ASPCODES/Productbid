@@ -16,9 +16,9 @@ func main() {
 	cfg := config.LoadConfig()
 
 	// Connect to database
-	db := db.ConnectDB(cfg.DatabaseURL)
+	database := db.ConnectDB(cfg.DatabaseURL)
 
-	_ = db
+	_ = database
 
 	// Create a fiber app
 	app := fiber.New()
