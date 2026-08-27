@@ -8,14 +8,14 @@ import (
 )
 
 
-func NewConnection(dsn string) *gorm.DB {
+func ConnectDB(dsn string) *gorm.DB {
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
 	if err != nil {
-		log.Fatal("Database isn't Connected!!", err)
+		log.Fatal("Failed to connect to database: ", err)
 	}
 
-	log.Println("Database Connected!!")
+	log.Println("Database connected successfully")
 	return db
 }
 

@@ -1,43 +1,31 @@
 package main
 
 import (
-	"Productbid/db"
 	"log"
-	"os"
+	"Productbid/config"
+	"Productbid/db"
+
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/joho/godotenv"
+	
 )
 
+
 func main() {
-	// here .env is loading
+	// Load config from .env
+	cfg := config.LoadConfig()
 
-	if err := godotenv.Load(); err != nil {
-		log.Println(".env file not found")
-	}
+	// Connect to database
+	db := db.ConnectDB(cfg.DatabaseURL)
 
+	_ = db
 
-	// connecting postgress 
-
-	pg := db.NewConnection(os.Getenv("DATABASE_URL"))
-	_ = pg
-
-
-
-	//Starting the server
-
+	// Create a fiber app
 	app := fiber.New()
 
-	app.Get("/health", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"status": "okay"})
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("ProductBid backend is running")
 	})
 
-	port := os.Getenv("PORT")
-
-	log.Printf("server starting on port %s", port)
-
-	if err := app.Listen(":" + port); err != nil {
-		log.Fatal(err)
-	}
-
+	log.Fatal(app.Listen(":" + cfg.Port))
 }
