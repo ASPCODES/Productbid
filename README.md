@@ -5,7 +5,7 @@
 <br/>
 <br/>
 
-**Bid Higher. Get Seen.**
+## Bid Higher. Get Seen.
 
 <br/>
 
