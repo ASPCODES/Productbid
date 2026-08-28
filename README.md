@@ -1,10 +1,19 @@
+<div align="center">
+
+<img src="./assets/logo.png" alt="ProductBid Logo" width="180"/>
+
 # ProductBid
 
-ProductBid is a web application that allows users to bid on products in real-time. It provides a platform for sellers to list their products and for buyers to place bids, creating a competitive marketplace.
+**Bid Higher. Get Seen.**
 
+A bidding platform where startups compete for visibility
+and users discover the products worth watching.
 
-## Features
+</div>
 
-- Real-time bidding system
+---
 
-- Product listing and management
+## 🚀 About
+
+ProductBid is a platform designed to help startups get
+visibility through a bidding-based product discovery system.
