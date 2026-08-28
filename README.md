@@ -5,18 +5,21 @@
 <br/>
 <br/>
 
-# ProductBid
-
 **Bid Higher. Get Seen.**
 
-A bidding platform where startups compete for visibility
+<br/>
+
+An open source platform where startups compete for visibility
 and users discover the products worth watching.
+
 
 </div>
 
 ---
 
-## 🚀 About
+## ✨ Features
 
-ProductBid is a platform designed to help startups get
-visibility through a bidding-based product discovery system.
+- 🚀 Product promotion through bidding
+- 📊 Transparent bidding
+- 🏆 Ranked product visibility
+- 💳 Payment integration
