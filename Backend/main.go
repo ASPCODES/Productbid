@@ -1,14 +1,14 @@
 package main
 
 import (
-	
 	"Productbid/config"
 	"Productbid/db"
+	"Productbid/middlewares"
 	"Productbid/routes"
 	"log"
 
 	"github.com/gofiber/fiber/v2"
-
+	"github.com/gofiber/fiber/v2/middleware/cors"
 )
 
 
@@ -18,11 +18,12 @@ func main() {
 
 	// Connect to database
 	database := db.ConnectDB(cfg.DatabaseURL)
-
-	_ = database
+	
 
 	// Create a fiber app
 	app := fiber.New()
+	// Adding middlewares
+	app.Use(cors.New(middlewares.SetupCORS()))
 
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.SendString("ProductBid backend is running")
@@ -31,6 +32,7 @@ func main() {
 	// Register all Routes
 
 	routes.RegisterCategoryRoutes(app, database)
+	routes.RegisterProductRoutes(app, database)
 
 	log.Fatal(app.Listen(":" + cfg.Port))
 }
