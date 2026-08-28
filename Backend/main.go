@@ -1,13 +1,14 @@
 package main
 
 import (
-	"log"
+	
 	"Productbid/config"
 	"Productbid/db"
-
+	"Productbid/routes"
+	"log"
 
 	"github.com/gofiber/fiber/v2"
-	
+
 )
 
 
@@ -26,6 +27,10 @@ func main() {
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.SendString("ProductBid backend is running")
 	})
+
+	// Register all Routes
+
+	routes.RegisterCategoryRoutes(app, database)
 
 	log.Fatal(app.Listen(":" + cfg.Port))
 }
