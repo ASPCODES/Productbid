@@ -34,6 +34,7 @@ func main() {
 	routes.RegisterCategoryRoutes(app, database)
 	routes.RegisterProductRoutes(app, database)
 	routes.RegisterBidRoutes(app, database)
+	routes.RegisterLeaderboardRoutes(app, database)
 
 	log.Fatal(app.Listen(":" + cfg.Port))
 }
