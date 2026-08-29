@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./assets/image.png" alt="ProductBid" width="100%"/>
+<img src="./assets/img.png" alt="ProductBid" width="100%"/>
 
 <br/>
 <br/>
