@@ -2,7 +2,7 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: always
-    container_name: productbid
+    container_name: productbid-backend
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
