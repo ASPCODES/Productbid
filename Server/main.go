@@ -5,6 +5,7 @@ import (
 	"Productbid/db"
 	"Productbid/middlewares"
 	"Productbid/routes"
+	"Productbid/services"
 	"log"
 
 	"github.com/gofiber/fiber/v2"
@@ -18,10 +19,18 @@ func main() {
 
 	// Connect to database
 	database := db.ConnectDB(cfg.DatabaseURL)
-	
+
+	// Initialize Services
+	paymentService := services.NewPaymentService(
+		cfg.DodoAPIKey,
+		cfg.DodoWebhookSecret,
+		cfg.DodoMode,
+	)
+	bidService := services.NewBidService(database)
 
 	// Create a fiber app
 	app := fiber.New()
+
 	// Adding middlewares
 	app.Use(cors.New(middlewares.SetupCORS()))
 
@@ -29,12 +38,14 @@ func main() {
 		return c.SendString("ProductBid backend is running")
 	})
 
-	// Register all Routes
 
+	// Register all Routes
 	routes.RegisterCategoryRoutes(app, database)
 	routes.RegisterProductRoutes(app, database)
-	routes.RegisterBidRoutes(app, database)
+	routes.RegisterBidRoutes(app, database, bidService, paymentService, cfg.FrontendURL)
 	routes.RegisterLeaderboardRoutes(app, database)
+	routes.RegisterWebhookRoutes(app, database, paymentService, bidService)
 
+	log.Println("ProductBid backend listening on port :" + cfg.Port)
 	log.Fatal(app.Listen(":" + cfg.Port))
 }

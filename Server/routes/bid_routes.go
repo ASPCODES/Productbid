@@ -1,17 +1,23 @@
 package routes
 
-import(
+import (
 	"Productbid/handlers"
+	"Productbid/services"
 
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
 )
 
-
-func RegisterBidRoutes(app *fiber.App, db *gorm.DB) {
-	bidHandler := handlers.NewBidHandler(db)
+func RegisterBidRoutes(
+	app *fiber.App,
+	db *gorm.DB,
+	bidService *services.BidService,
+	paymentService *services.PaymentService,
+	frontendURL string,
+) {
+	bidHandler := handlers.NewBidHandler(db, bidService, paymentService, frontendURL)
 
 	app.Post("/api/bids/preview", bidHandler.PreviewRank)
-	app.Post("/api/bids/place", bidHandler.PlaceBid)
+	app.Post("/api/bids/initiate", bidHandler.InitiateBid)
 }
 

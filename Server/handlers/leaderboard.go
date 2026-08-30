@@ -39,14 +39,19 @@ func (h* LeaderboardHandler) GetLeaderboard(c *fiber.Ctx) error {
 	query := h.DB.Preload("Product").Where("is_active = ?", true).Order("amount DESC")
 
 
-	// if category filter is given, then give me only that category bids
-	if categoryParam != "" {
+	// if category filter is given, then give only that category bids
+	if categoryParam != "" && categoryParam != "all" {
 		categoryID, err := strconv.ParseInt(categoryParam, 10, 64)
-
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid category id",
-			})
+			// Try finding category by slug
+			var cat models.Category
+			if findErr := h.DB.Where("slug = ?", categoryParam).First(&cat).Error; findErr == nil {
+				categoryID = int64(cat.ID)
+			} else {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Invalid category filter",
+				})
+			}
 		}
 
 		query = query.Where("category_id = ?", categoryID)

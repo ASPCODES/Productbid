@@ -23,7 +23,7 @@ func ConnectDB(dsn string) *gorm.DB {
 		&models.Category{},
 		&models.Product{},
 		&models.Bid{},
-		models.Payment{},
+		&models.Payment{},
 	)
 
 	if err != nil {
