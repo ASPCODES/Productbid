@@ -65,7 +65,7 @@ Verify your installation:
 go version
 docker --version
 git --version
-
+```
 
 
 ## Clone the Repository
