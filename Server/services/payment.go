@@ -125,6 +125,7 @@ func (s *PaymentService) CreateCheckoutSession(
 	if err != nil {
 		return "", "", fmt.Errorf("failed to marshal checkout request: %w", err)
 	}
+	log.Printf("[Dodo] Request Body: %s", string(jsonData))
 
 	url := fmt.Sprintf("%s/checkouts", s.BaseURL)
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(jsonData))
