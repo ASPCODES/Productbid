@@ -4,6 +4,8 @@ import (
 	"Productbid/models"
 	"Productbid/services"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
@@ -108,6 +110,13 @@ func (h *BidHandler) InitiateBid(c *fiber.Ctx) error {
 		})
 	}
 
+	customerEmail := strings.TrimSpace(input.CustomerEmail)
+	if customerEmail == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "customer_email is required",
+		})
+	}
+
 	// Resolve Category if slug provided
 	categoryID := input.CategoryID
 	if categoryID == 0 && input.CategorySlug != "" {
@@ -143,7 +152,7 @@ func (h *BidHandler) InitiateBid(c *fiber.Ctx) error {
 				Tagline:      input.Tagline,
 				LogoURL:      input.LogoURL,
 				CategoryID:   categoryID,
-				ContactEmail: input.CustomerEmail,
+				ContactEmail: customerEmail,
 			}
 			if err := h.DB.Create(&newProduct).Error; err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -175,11 +184,6 @@ func (h *BidHandler) InitiateBid(c *fiber.Ctx) error {
 	returnURL := input.ReturnURL
 	if returnURL == "" {
 		returnURL = fmt.Sprintf("%s/?payment=success&bid_id=%d", h.FrontendURL, pendingBid.ID)
-	}
-
-	customerEmail := input.CustomerEmail
-	if customerEmail == "" {
-		customerEmail = product.ContactEmail
 	}
 
 	// 3. Create Checkout Session with Dodo Payments
@@ -214,5 +218,28 @@ func (h *BidHandler) InitiateBid(c *fiber.Ctx) error {
 		"dodo_session_id": sessionID,
 		"product_id":      productID,
 		"amount":          pendingBid.Amount,
+	})
+}
+
+// DeleteBid permanently deletes a bid and its associated payment records (DELETE /api/bids/:id)
+func (h *BidHandler) DeleteBid(c *fiber.Ctx) error {
+	idParam := c.Params("id")
+	bidID, err := strconv.ParseUint(idParam, 10, 64)
+	if err != nil || bidID == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid bid ID",
+		})
+	}
+
+	if err := h.BidService.DeleteBid(uint(bidID)); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"success": true,
+		"message": "Bid deleted successfully",
+		"bid_id":  bidID,
 	})
 }

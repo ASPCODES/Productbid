@@ -20,5 +20,6 @@ func RegisterBidRoutes(
 
 	app.Post("/api/bids/preview", bidHandler.PreviewRank)
 	app.Post("/api/bids/initiate", bidHandler.InitiateBid)
+	app.Delete("/api/bids/:id", bidHandler.DeleteBid)
 }
 

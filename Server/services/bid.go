@@ -85,3 +85,26 @@ func (s *BidService) PreviewRank(categoryID uint, amount float64) (int64, error)
 
 	return higherBidCount + 1, nil
 }
+
+// DeleteBid permanently deletes a bid and its associated payment records from the database
+func (s *BidService) DeleteBid(bidID uint) error {
+	if bidID == 0 {
+		return errors.New("invalid bid id")
+	}
+
+	// Permanently delete associated payment records
+	if err := s.DB.Unscoped().Where("bid_id = ?", bidID).Delete(&models.Payment{}).Error; err != nil {
+		return fmt.Errorf("failed to delete payment records for bid %d: %w", bidID, err)
+	}
+
+	// Permanently delete the bid row
+	result := s.DB.Unscoped().Where("id = ?", bidID).Delete(&models.Bid{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete bid %d: %w", bidID, result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("bid with id %d not found", bidID)
+	}
+
+	return nil
+}
