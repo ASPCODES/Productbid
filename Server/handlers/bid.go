@@ -14,6 +14,7 @@ type BidHandler struct {
 	BidService     *services.BidService
 	PaymentService *services.PaymentService
 	FrontendURL    string
+	DodoProductID  string 
 }
 
 func NewBidHandler(
@@ -21,12 +22,14 @@ func NewBidHandler(
 	bidService *services.BidService,
 	paymentService *services.PaymentService,
 	frontendURL string,
+	dodoProductID string, 
 ) *BidHandler {
 	return &BidHandler{
 		DB:             db,
 		BidService:     bidService,
 		PaymentService: paymentService,
 		FrontendURL:    frontendURL,
+		DodoProductID:  dodoProductID,
 	}
 }
 
@@ -182,10 +185,10 @@ func (h *BidHandler) InitiateBid(c *fiber.Ctx) error {
 	// 3. Create Checkout Session with Dodo Payments
 	checkoutURL, sessionID, err := h.PaymentService.CreateCheckoutSession(
 		pendingBid.ID,
-		product.Name,
+		h.DodoProductID,   
 		pendingBid.Amount,
-		"USD",
 		customerEmail,
+		product.Name,   
 		returnURL,
 	)
 	if err != nil {

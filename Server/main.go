@@ -42,7 +42,7 @@ func main() {
 	// Register all Routes
 	routes.RegisterCategoryRoutes(app, database)
 	routes.RegisterProductRoutes(app, database)
-	routes.RegisterBidRoutes(app, database, bidService, paymentService, cfg.FrontendURL)
+	routes.RegisterBidRoutes(app, database, bidService, paymentService, cfg.FrontendURL, cfg.DodoProductID)
 	routes.RegisterLeaderboardRoutes(app, database)
 	routes.RegisterWebhookRoutes(app, database, paymentService, bidService)
 

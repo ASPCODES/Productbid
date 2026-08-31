@@ -15,6 +15,7 @@ type Config struct {
 	DodoAPIKey        string
 	DodoWebhookSecret string
 	DodoMode          string
+	DodoProductID     string
 	FrontendURL       string
 }
 
@@ -46,6 +47,7 @@ func LoadConfig() *Config {
 		DodoAPIKey:        os.Getenv("DODO_API_KEY"),
 		DodoWebhookSecret: os.Getenv("DODO_WEBHOOK_SECRET"),
 		DodoMode:          dodoMode,
+		DodoProductID:     os.Getenv("DODO_PRODUCT_ID"),
 		FrontendURL:       frontendURL,
 	}
 
@@ -53,6 +55,10 @@ func LoadConfig() *Config {
 		log.Fatal("DATABASE_URL is not set in .env")
 	}
 
+
+	if cfg.DodoProductID == "" {
+		log.Fatal("DODO_PRODUCT_ID is not set in .env")
+	}
 
 	return cfg
 }

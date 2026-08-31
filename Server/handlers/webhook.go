@@ -85,7 +85,7 @@ func (h *WebhookHandler) HandleDodoWebhook(c *fiber.Ctx) error {
 	if paymentFound {
 		payment.Status = status
 		if dodoPaymentID != "" {
-			payment.DodoSessionID = dodoPaymentID
+			payment.DodoPaymentID = dodoPaymentID
 		}
 		h.DB.Save(&payment)
 		if bidID == 0 {

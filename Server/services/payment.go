@@ -17,6 +17,10 @@ import (
 	"time"
 )
 
+// MinimumBidAmount is the fixed floor for every bid ($3.00), enforced here
+// AND on the Dodo Payments dashboard via Pay What You Want minimum price.
+const MinimumBidAmount = 3.00
+
 type PaymentService struct {
 	DodoAPIKey        string
 	DodoWebhookSecret string
@@ -34,7 +38,7 @@ func NewPaymentService(apiKey, webhookSecret, mode string) *PaymentService {
 	return &PaymentService{
 		DodoAPIKey:        apiKey,
 		DodoWebhookSecret: webhookSecret,
-		DodoMode:          mode,
+		DodoMode:          strings.ToLower(mode),
 		BaseURL:           baseURL,
 		HTTPClient: &http.Client{
 			Timeout: 15 * time.Second,
@@ -42,10 +46,15 @@ func NewPaymentService(apiKey, webhookSecret, mode string) *PaymentService {
 	}
 }
 
+// ---------- Checkout Session ----------
+
+// CheckoutProductItem matches Dodo Payments' actual product_cart schema.
+// Amount is only used because the product has "Pay What You Want" enabled
+// on the Dodo dashboard — it must NOT be sent for fixed-price products.
 type CheckoutProductItem struct {
-	Name     string `json:"name,omitempty"`
-	Amount   int    `json:"amount"` // Amount in smallest unit (cents)
-	Quantity int    `json:"quantity"`
+	ProductID string `json:"product_id"`
+	Quantity  int    `json:"quantity"`
+	Amount    int    `json:"amount,omitempty"` // cents, PWYW products only
 }
 
 type CheckoutCustomer struct {
@@ -58,53 +67,58 @@ type CreateCheckoutRequest struct {
 	Customer    CheckoutCustomer      `json:"customer,omitempty"`
 	Metadata    map[string]string     `json:"metadata,omitempty"`
 	ReturnURL   string                `json:"return_url,omitempty"`
-	PaymentLink bool                  `json:"payment_link"`
 }
 
+// CreateCheckoutResponse matches the real Dodo Payments API response shape.
 type CreateCheckoutResponse struct {
-	CheckoutURL string `json:"checkout_url"`
-	PaymentLink string `json:"payment_link"`
-	PaymentID   string `json:"payment_id"`
-	SessionID   string `json:"session_id"`
-	ID          string `json:"id"`
-	Message     string `json:"message"`
+	SessionID      string `json:"session_id"`
+	CheckoutURL    string `json:"checkout_url"`
+	ClientSecret   string `json:"client_secret"`
+	PaymentID      string `json:"payment_id"`
+	PublishableKey string `json:"publishable_key"`
 }
 
-// CreateCheckoutSession calls Dodo Payments API to create a hosted checkout session
+// CreateCheckoutSession calls Dodo Payments API to create a hosted checkout
+// session for a bid. productID must be a PWYW-enabled one-time product with
+// a $3.00 minimum configured on the Dodo dashboard.
 func (s *PaymentService) CreateCheckoutSession(
 	bidID uint,
-	productName string,
-	amount float64,
-	currency string,
+	productID string,
+	bidAmount float64,
 	customerEmail string,
+	customerName string,
 	returnURL string,
-) (string, string, error) {
-	if amount <= 0 {
-		return "", "", errors.New("amount must be greater than zero")
+) (checkoutURL string, sessionID string, err error) {
+
+	if productID == "" {
+		return "", "", errors.New("productID is required")
+	}
+	if bidAmount < MinimumBidAmount {
+		return "", "", fmt.Errorf("bid amount must be at least $%.2f", MinimumBidAmount)
+	}
+	if s.DodoAPIKey == "" {
+		return "", "", errors.New("dodo API key is not configured")
 	}
 
-	// Amount in cents (e.g. $3.00 -> 300)
-	amountInCents := int(amount * 100)
+	amountInCents := int(bidAmount*100 + 0.5) // round to nearest cent
 
 	reqBody := CreateCheckoutRequest{
 		ProductCart: []CheckoutProductItem{
 			{
-				Name:     fmt.Sprintf("ProductBid - %s (#1 Rank Bid)", productName),
-				Amount:   amountInCents,
-				Quantity: 1,
+				ProductID: productID,
+				Quantity:  1,
+				Amount:    amountInCents,
 			},
 		},
 		Customer: CheckoutCustomer{
 			Email: customerEmail,
-			Name:  productName,
+			Name:  customerName,
 		},
 		Metadata: map[string]string{
-			"bid_id":       strconv.FormatUint(uint64(bidID), 10),
-			"product_name": productName,
-			"amount_usd":   fmt.Sprintf("%.2f", amount),
+			"bid_id":     strconv.FormatUint(uint64(bidID), 10),
+			"amount_usd": fmt.Sprintf("%.2f", bidAmount),
 		},
-		ReturnURL:   returnURL,
-		PaymentLink: true,
+		ReturnURL: returnURL,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -117,32 +131,23 @@ func (s *PaymentService) CreateCheckoutSession(
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create http request: %w", err)
 	}
-
 	req.Header.Set("Content-Type", "application/json")
-	if s.DodoAPIKey != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", s.DodoAPIKey))
-	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", s.DodoAPIKey))
 
 	resp, err := s.HTTPClient.Do(req)
 	if err != nil {
-		log.Printf("[Dodo Payments] Error calling checkout API: %v", err)
-		// If Dodo API is unreachable (e.g. local offline sandbox or keys in review), provide sandbox simulated URL
-		simulatedURL := fmt.Sprintf("%s/sandbox/checkout?bid_id=%d&amount=%.2f", s.BaseURL, bidID, amount)
-		simulatedID := fmt.Sprintf("sim_dodo_%d_%d", bidID, time.Now().Unix())
-		return simulatedURL, simulatedID, nil
+		log.Printf("[Dodo Payments] request failed: %v", err)
+		return "", "", fmt.Errorf("failed to reach dodo payments: %w", err)
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyBytes, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return "", "", fmt.Errorf("failed to read dodo response: %w", readErr)
+	}
 
 	if resp.StatusCode >= 400 {
-		log.Printf("[Dodo Payments] API returned error status %d: %s", resp.StatusCode, string(bodyBytes))
-		// If sandbox credentials are being reviewed, generate a valid redirectable sandbox session
-		if s.DodoMode == "test" || s.DodoAPIKey == "" {
-			simulatedURL := fmt.Sprintf("%s/sandbox/checkout?bid_id=%d&amount=%.2f", s.BaseURL, bidID, amount)
-			simulatedID := fmt.Sprintf("sim_dodo_%d_%d", bidID, time.Now().Unix())
-			return simulatedURL, simulatedID, nil
-		}
+		log.Printf("[Dodo Payments] API error status %d: %s", resp.StatusCode, string(bodyBytes))
 		return "", "", fmt.Errorf("dodo payments error (%d): %s", resp.StatusCode, string(bodyBytes))
 	}
 
@@ -151,26 +156,21 @@ func (s *PaymentService) CreateCheckoutSession(
 		return "", "", fmt.Errorf("failed to parse dodo checkout response: %w", err)
 	}
 
-	checkoutURL := checkoutResp.CheckoutURL
-	if checkoutURL == "" {
-		checkoutURL = checkoutResp.PaymentLink
+	if checkoutResp.CheckoutURL == "" {
+		return "", "", errors.New("dodo payments did not return a checkout_url")
 	}
 
-	sessionID := checkoutResp.PaymentID
+	sessionID = checkoutResp.SessionID
 	if sessionID == "" {
-		sessionID = checkoutResp.SessionID
-	}
-	if sessionID == "" {
-		sessionID = checkoutResp.ID
-	}
-	if sessionID == "" {
-		sessionID = fmt.Sprintf("dodo_bid_%d", bidID)
+		sessionID = checkoutResp.PaymentID
 	}
 
-	return checkoutURL, sessionID, nil
+	return checkoutResp.CheckoutURL, sessionID, nil
 }
 
-// VerifyWebhookSignature verifies Standard Webhooks HMAC-SHA256 signature
+// ---------- Webhook Verification ----------
+
+// VerifyWebhookSignature verifies Standard Webhooks HMAC-SHA256 signature.
 func (s *PaymentService) VerifyWebhookSignature(
 	payload []byte,
 	signatureHeader string,
@@ -179,8 +179,8 @@ func (s *PaymentService) VerifyWebhookSignature(
 ) bool {
 	secret := strings.TrimSpace(s.DodoWebhookSecret)
 	if secret == "" {
-		log.Println("[Dodo Webhook] Warning: DODO_WEBHOOK_SECRET is empty. Allowing verification in test mode.")
-		return s.DodoMode == "test"
+		log.Println("[Dodo Webhook] DODO_WEBHOOK_SECRET is empty — rejecting webhook")
+		return false // never silently accept unsigned webhooks, even in test mode
 	}
 
 	if signatureHeader == "" || webhookID == "" || webhookTimestamp == "" {
@@ -188,47 +188,50 @@ func (s *PaymentService) VerifyWebhookSignature(
 		return false
 	}
 
-	// Validate timestamp tolerance (5 minutes)
+	// Validate timestamp tolerance (5 minutes) to prevent replay attacks.
 	ts, err := strconv.ParseInt(webhookTimestamp, 10, 64)
-	if err == nil {
-		currentTime := time.Now().Unix()
-		diff := currentTime - ts
-		if diff < -300 || diff > 300 {
-			log.Printf("[Dodo Webhook] Timestamp out of tolerance: current %d, received %d", currentTime, ts)
-			return false
-		}
+	if err != nil {
+		log.Println("[Dodo Webhook] Invalid timestamp header")
+		return false
+	}
+	diff := time.Now().Unix() - ts
+	if diff < -300 || diff > 300 {
+		log.Printf("[Dodo Webhook] Timestamp out of tolerance: now=%d received=%d", time.Now().Unix(), ts)
+		return false
 	}
 
-	// Strip 'whsec_' prefix if present
+	// Strip 'whsec_' prefix if present, then base64-decode per Standard Webhooks spec.
 	cleanSecret := strings.TrimPrefix(secret, "whsec_")
 	secretBytes, err := base64.StdEncoding.DecodeString(cleanSecret)
 	if err != nil {
 		secretBytes = []byte(secret)
 	}
 
-	// Signed content format: "${webhook_id}.${webhook_timestamp}.${raw_body}"
+	// Signed content format: "{webhook_id}.{webhook_timestamp}.{raw_body}"
 	payloadToSign := fmt.Sprintf("%s.%s.%s", webhookID, webhookTimestamp, string(payload))
 
 	mac := hmac.New(sha256.New, secretBytes)
 	mac.Write([]byte(payloadToSign))
 	expectedSignature := base64.StdEncoding.EncodeToString(mac.Sum(nil))
 
-	// signatureHeader can contain space-separated signatures e.g., "v1,signature1 v1,signature2"
-	signatures := strings.Split(signatureHeader, " ")
-	for _, sig := range signatures {
+
+	// signatureHeader can contain space-separated signatures, e.g. "v1,sigA v1,sigB"
+	for _, sig := range strings.Split(signatureHeader, " ") {
 		parts := strings.SplitN(sig, ",", 2)
+		candidate := sig
 		if len(parts) == 2 && parts[0] == "v1" {
-			if subtle.ConstantTimeCompare([]byte(parts[1]), []byte(expectedSignature)) == 1 {
-				return true
-			}
-		} else if subtle.ConstantTimeCompare([]byte(sig), []byte(expectedSignature)) == 1 {
+			candidate = parts[1]
+		}
+		if subtle.ConstantTimeCompare([]byte(candidate), []byte(expectedSignature)) == 1 {
 			return true
 		}
 	}
 
-	log.Printf("[Dodo Webhook] Signature verification failed")
+	log.Println("[Dodo Webhook] Signature verification failed")
 	return false
 }
+
+// ---------- Webhook Event Parsing ----------
 
 type DodoWebhookData struct {
 	PaymentID   string            `json:"payment_id"`
@@ -240,43 +243,42 @@ type DodoWebhookData struct {
 }
 
 type DodoWebhookPayload struct {
-	Type      string          `json:"type"`
-	Timestamp string          `json:"timestamp"`
-	Data      DodoWebhookData `json:"data"`
+	Type      string           `json:"type"`
+	Timestamp string           `json:"timestamp"`
+	Data      DodoWebhookData  `json:"data"`
 }
 
-// ParseWebhookEvent extracts bidID, paymentID, and status from Dodo webhook JSON
-func (s *PaymentService) ParseWebhookEvent(payload []byte) (uint, string, string, error) {
+// ParseWebhookEvent extracts bidID, paymentID, and a normalized status
+// ("success" | "failed" | raw status) from a verified Dodo webhook body.
+func (s *PaymentService) ParseWebhookEvent(payload []byte) (bidID uint, paymentID string, status string, err error) {
 	var event DodoWebhookPayload
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return 0, "", "", fmt.Errorf("failed to parse webhook payload: %w", err)
 	}
 
-	eventType := strings.ToLower(event.Type)
-	var status string
-
-	switch eventType {
+	switch strings.ToLower(event.Type) {
 	case "payment.succeeded", "payment.successful", "payment_succeeded":
 		status = "success"
 	case "payment.failed", "payment_failed":
 		status = "failed"
 	default:
-		// Check data status
-		if strings.ToLower(event.Data.Status) == "succeeded" || strings.ToLower(event.Data.Status) == "success" {
+		switch strings.ToLower(event.Data.Status) {
+		case "succeeded", "success":
 			status = "success"
-		} else {
+		case "failed":
+			status = "failed"
+		default:
 			status = event.Data.Status
 		}
 	}
 
-	paymentID := event.Data.PaymentID
+	paymentID = event.Data.PaymentID
 	if paymentID == "" {
 		paymentID = event.Data.ID
 	}
 
-	var bidID uint
 	if bidIDStr, ok := event.Data.Metadata["bid_id"]; ok && bidIDStr != "" {
-		if parsed, err := strconv.ParseUint(bidIDStr, 10, 64); err == nil {
+		if parsed, parseErr := strconv.ParseUint(bidIDStr, 10, 64); parseErr == nil {
 			bidID = uint(parsed)
 		}
 	}
